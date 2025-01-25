@@ -5,9 +5,9 @@ However, if you manage to make this more straightforward, please send me PR's.
 
 # mcp-inception MCP Server
 
-Call another mcp client from your mcp client. Delegate tasks, offload context windows. An agent for your agent
+Call another mcp client from your mcp client. Delegate tasks, offload context windows. An agent for your agent!
 
-This is a TypeScript-based MCP server that implements a simple notes system. It demonstrates core MCP concepts by providing:
+This is a TypeScript-based MCP server that implements a simple LLM query system.
 
 - MCP Server and Client in one
 - Made with use of [mcp-client-cli](https://github.com/adhikasp/mcp-client-cli)
