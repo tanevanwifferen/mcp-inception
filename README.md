@@ -13,7 +13,7 @@ This is a TypeScript-based MCP server that implements a simple LLM query system.
 - Made with use of [mcp-client-cli](https://github.com/adhikasp/mcp-client-cli)
 - Offload context windows
 - Delegate tasks
-- TODO: parallel execution of tasks
+- TODO: parallel execution of tasks - Wait for [this mr](https://github.com/adhikasp/mcp-client-cli/pull/11) before trying parallel execution.
 
 ## Features
 

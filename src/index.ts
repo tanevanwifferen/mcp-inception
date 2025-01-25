@@ -23,16 +23,19 @@ const execAsync = promisify(exec);
 interface McpInceptionConfig {
   executable?: string;
   workingDirectory?: string;
+  maxConcurrent?: number;
 }
 
 class McpInceptionServer {
   private server: Server;
   private executable: string;
   private workingDirectory: string;
+  private readonly maxConcurrent: number;
 
   constructor(config: McpInceptionConfig = {}) {
     this.executable = process.env.MCP_INCEPTION_EXECUTABLE || config.executable || 'llm';
     this.workingDirectory = process.env.MCP_INCEPTION_WORKING_DIR || config.workingDirectory || process.cwd();
+    this.maxConcurrent = parseInt(process.env.MCP_INCEPTION_MAX_CONCURRENT || '') || config.maxConcurrent || 10;
     this.server = new Server(
       {
         name: 'mcp-inception',
@@ -56,7 +59,7 @@ class McpInceptionServer {
   }
 
   // Helper function to safely pipe input to a command
-  private async safeCommandPipe(input: string, command: string): Promise<{stdout: string, stderr: string}> {
+  private async safeCommandPipe(input: string, command: string, forceJson: boolean = false): Promise<{stdout: string, stderr: string}> {
     return new Promise((resolve, reject) => {
       // Get the full path to the executable
       const executablePath = join(this.workingDirectory, this.executable);
@@ -97,9 +100,41 @@ class McpInceptionServer {
       });
 
       // Safely write input with newline and close stdin
-      proc.stdin.write(Buffer.from(input + '\n'));
+      // If forceJson is true, append a directive to return JSON
+      const inputWithDirective = forceJson ? input + ' [RESPOND IN JSON KEY-VALUE PAIRS]' : input;
+      proc.stdin.write(Buffer.from(inputWithDirective + '\n'));
       proc.stdin.end();
     });
+  }
+
+  /**
+   * Executes multiple commands in parallel with a maximum concurrency limit
+   */
+  private async executeParallel(prompt: string, items: string[]): Promise<{results: any[], errors: string[]}> {
+    const results: any[] = [];
+    const errors: string[] = [];
+    
+    // Process items in chunks based on maxConcurrent
+    for (let i = 0; i < items.length; i += this.maxConcurrent) {
+      const chunk = items.slice(i, i + this.maxConcurrent);
+      const promises = chunk.map(async (item) => {
+        try {
+          const { stdout, stderr } = await this.safeCommandPipe(`${prompt} ${item}`, this.executable, true);
+          if (stdout) {
+            results.push(stdout);
+          } else if (stderr) {
+            errors.push(`Error processing item "${item}": ${stderr}`);
+          }
+        } catch (error: any) {
+          errors.push(`Failed to process item "${item}": ${error.message}`);
+        }
+      });
+      
+      // Wait for current chunk to complete before processing next chunk
+      await Promise.all(promises);
+    }
+    
+    return { results, errors };
   }
 
   private setupToolHandlers() {
@@ -119,40 +154,89 @@ class McpInceptionServer {
             required: ['command'],
           },
         },
+        {
+          name: 'execute_parallel_mcp_client',
+          description: 'Execute multiple AI tasks in parallel, with responses in JSON key-value pairs.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              prompt: {
+                type: 'string',
+                description: 'The base prompt to use for all executions',
+              },
+              items: {
+                type: 'array',
+                items: {
+                  type: 'string'
+                },
+                description: 'Array of parameters to process in parallel',
+              },
+            },
+            required: ['prompt', 'items'],
+          },
+        },
       ],
     }));
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      if (request.params.name !== 'execute_mcp_client') {
-        throw new McpError(
-          ErrorCode.MethodNotFound,
-          `Unknown tool: ${request.params.name}`
-        );
-      }
-
-      const args = request.params.arguments as { command: string };
-      
-      try {
-        // Safely pipe the command to the configured executable
-        const { stdout, stderr } = await this.safeCommandPipe(args.command, this.executable);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: stdout || stderr,
-            },
-          ],
-        };
-      } catch (error: any) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Error executing MCP client command: ${error?.message || 'Unknown error'}`,
-            },
-          ],
-          isError: true,
-        };
+      switch (request.params.name) {
+        case 'execute_mcp_client': {
+          const args = request.params.arguments as { command: string };
+          try {
+            const { stdout, stderr } = await this.safeCommandPipe(args.command, this.executable);
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: stdout || stderr,
+                },
+              ],
+            };
+          } catch (error: any) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Error executing MCP client command: ${error?.message || 'Unknown error'}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+        }
+        
+        case 'execute_parallel_mcp_client': {
+          const args = request.params.arguments as { prompt: string; items: string[] };
+          
+          try {
+            const { results, errors } = await this.executeParallel(args.prompt, args.items);
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({ results, errors }, null, 2),
+                },
+              ],
+              isError: errors.length > 0,
+            };
+          } catch (error: any) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Error executing parallel MCP client commands: ${error?.message || 'Unknown error'}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+        }
+        
+        default:
+          throw new McpError(
+            ErrorCode.MethodNotFound,
+            `Unknown tool: ${request.params.name}`
+          );
       }
     });
   }
