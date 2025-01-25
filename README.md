@@ -15,6 +15,8 @@ This is a TypeScript-based MCP server that implements a simple LLM query system.
 - Delegate tasks
 - TODO: parallel execution of tasks - Wait for [this mr](https://github.com/adhikasp/mcp-client-cli/pull/11) before trying parallel execution.
 
+<a href="https://glama.ai/mcp/servers/hedrd1hxv5"><img width="380" height="200" src="https://glama.ai/mcp/servers/hedrd1hxv5/badge" alt="Inception Server MCP server" /></a>
+
 ## Features
 
 ### Tools
