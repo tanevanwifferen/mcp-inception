@@ -1,0 +1,26 @@
+{
+  "name": "mcp-inception",
+  "version": "0.1.0",
+  "description": "Call another mcp client from your mcp client. Delegate tasks, offload context windows. An agent for your agent",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "mcp-inception": "./build/index.js"
+  },
+  "files": [
+    "build"
+  ],
+  "scripts": {
+    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+    "prepare": "npm run build",
+    "watch": "tsc --watch",
+    "inspector": "npx @modelcontextprotocol/inspector build/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.16",
+    "typescript": "^5.7.3"
+  }
+}
