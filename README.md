@@ -21,6 +21,12 @@ This is a TypeScript-based MCP server that implements a simple LLM query system.
 - `execute_mcp_client` - Ask a question to a separate LLM, ignore all the intermediate steps it takes when querying it's tools, and return the output.
   - Takes question as required parameters
   - Returns answer, ignoring all the intermediate context
+- execute_parallel_mcp_client - Takes a list of inputs and a main prompt, and executes the prompt in parallel for each string in the input. 
+  E.G. get the time of 6 major cities right now - London, Paris, Tokyo, Rio, New York, Sidney.
+  - takes main prompt "What is the time in this city?"
+  - takes list of inputs, London Paris etc
+  - runs the prompt in parallel for each input
+  - note: wait for [this](https://github.com/adhikasp/mcp-client-cli/pull/11) before using this feature
 
 ## Development
 
