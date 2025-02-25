@@ -13,7 +13,7 @@ This is a TypeScript-based MCP server that implements a simple LLM query system.
 - Made with use of [mcp-client-cli](https://github.com/adhikasp/mcp-client-cli)
 - Offload context windows
 - Delegate tasks
-- TODO: parallel execution of tasks - Wait for [this mr](https://github.com/adhikasp/mcp-client-cli/pull/11) before trying parallel execution.
+- Parallel and map-reduce execution of tasks
 
 <a href="https://glama.ai/mcp/servers/hedrd1hxv5"><img width="380" height="200" src="https://glama.ai/mcp/servers/hedrd1hxv5/badge" alt="Inception Server MCP server" /></a>
 
@@ -29,6 +29,13 @@ This is a TypeScript-based MCP server that implements a simple LLM query system.
   - takes list of inputs, London Paris etc
   - runs the prompt in parallel for each input
   - note: wait for [this](https://github.com/adhikasp/mcp-client-cli/pull/11) before using this feature
+- `execute_map_reduce_mcp_client` - Process multiple items in parallel and then sequentially reduce the results to a single output.
+  - Takes `mapPrompt` with `{item}` placeholder for individual item processing
+  - Takes `reducePrompt` with `{accumulator}` and `{result}` placeholders for combining results
+  - Takes list of `items` to process
+  - Optional `initialValue` for the accumulator
+  - Processes items in parallel, then sequentially reduces results
+  - Example use case: Analyze multiple documents, then synthesize key insights from all documents into a summary
 
 ## Development
 

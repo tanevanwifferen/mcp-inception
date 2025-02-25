@@ -110,6 +110,70 @@ class McpInceptionServer {
   /**
    * Executes multiple commands in parallel with a maximum concurrency limit
    */
+
+  /**
+   * Executes a map-reduce operation on the provided items
+   * First processes all items in parallel using mapPrompt, then sequentially
+   * reduces the results using reducePrompt
+   */
+  private async executeMapReduce(
+    mapPrompt: string, 
+    reducePrompt: string, 
+    items: string[], 
+    initialValue?: string
+  ): Promise<{result: string, errors: string[]}> {
+    const errors: string[] = [];
+    let accumulator = initialValue || '';
+    
+    try {
+      // Step 1: Process all items in parallel (map phase)
+      const mapResults: string[] = [];
+      
+      // Process items in chunks based on maxConcurrent (similar to executeParallel)
+      for (let i = 0; i < items.length; i += this.maxConcurrent) {
+        const chunk = items.slice(i, i + this.maxConcurrent);
+        const promises = chunk.map(async (item) => {
+          try {
+            // Format the map prompt by replacing {item} with the current item
+            const formattedMapPrompt = mapPrompt.replace(/{item}/g, item);
+            const { stdout, stderr } = await this.safeCommandPipe(formattedMapPrompt, this.executable, true);
+            if (stdout) {
+              return stdout;
+            } else if (stderr) {
+              errors.push(`Error processing item "${item}": ${stderr}`);
+              return null;
+            }
+          } catch (error: any) {
+            errors.push(`Failed to process item "${item}": ${error.message}`);
+            return null;
+          }
+        });
+        
+        // Wait for current chunk to complete before processing next chunk
+        const results = await Promise.all(promises);
+        mapResults.push(...results.filter(Boolean) as string[]);
+      }
+      
+      // Step 2: Sequentially reduce the results
+      for (const result of mapResults) {
+        // Format the reduce prompt by replacing {accumulator} and {result} placeholders
+        const formattedReducePrompt = reducePrompt
+          .replace(/{accumulator}/g, accumulator)
+          .replace(/{result}/g, result);
+          
+        const { stdout, stderr } = await this.safeCommandPipe(formattedReducePrompt, this.executable, true);
+        if (stdout) {
+          accumulator = stdout;
+        }
+      }
+      
+      return { result: accumulator, errors };
+    } catch (error: any) {
+      errors.push(`Map-reduce operation failed: ${error.message}`);
+      return { result: accumulator, errors };
+    }
+  }
+  
   private async executeParallel(prompt: string, items: string[]): Promise<{results: any[], errors: string[]}> {
     const results: any[] = [];
     const errors: string[] = [];
@@ -175,6 +239,33 @@ class McpInceptionServer {
             required: ['prompt', 'items'],
           },
         },
+        {
+          name: 'execute_map_reduce_mcp_client',
+          description: 'Process multiple items in parallel then sequentially reduce the results to a single output.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              mapPrompt: {
+                type: 'string',
+                description: 'Template prompt for processing each individual item. Use {item} as placeholder for the current item.',
+              },
+              reducePrompt: {
+                type: 'string',
+                description: 'Template prompt for reducing results. Use {accumulator} and {result} as placeholders.',
+              },
+              initialValue: {
+                type: 'string',
+                description: 'Initial value for the accumulator (optional).',
+              },
+              items: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Array of items to process.',
+              },
+            },
+            required: ['mapPrompt', 'reducePrompt', 'items'],
+          },
+        },
       ],
     }));
 
@@ -225,6 +316,43 @@ class McpInceptionServer {
                 {
                   type: 'text',
                   text: `Error executing parallel MCP client commands: ${error?.message || 'Unknown error'}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+        }
+
+        case 'execute_map_reduce_mcp_client': {
+          const args = request.params.arguments as { 
+            mapPrompt: string; 
+            reducePrompt: string;
+            items: string[];
+            initialValue?: string;
+          };
+          
+          try {
+            const { result, errors } = await this.executeMapReduce(
+              args.mapPrompt,
+              args.reducePrompt,
+              args.items,
+              args.initialValue
+            );
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({ result, errors }, null, 2),
+                },
+              ],
+              isError: errors.length > 0,
+            };
+          } catch (error: any) {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Error executing map-reduce operation: ${error?.message || 'Unknown error'}`,
                 },
               ],
               isError: true,
